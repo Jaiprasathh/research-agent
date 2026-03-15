@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Research Agent</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <h1>Research Agent</h1>
+      <p class="subtitle">Ask anything. The agent breaks it down, finds sources, and writes a report.</p>
+    </header>
+
+    <div class="search-box">
+      <input
+        type="text"
+        id="question-input"
+        placeholder="e.g. What caused the 2008 financial crisis?"
+        autocomplete="off"
+      />
+      <button id="search-btn" onclick="startResearch()">Research</button>
+    </div>
+
+    <!-- Agent steps panel (hidden until research starts) -->
+    <div class="steps-panel" id="steps-panel" style="display:none;">
+      <div class="step" id="step-decompose">
+        <span class="step-icon pending" id="icon-decompose"></span>
+        <span class="step-label">Breaking question into sub-tasks</span>
+      </div>
+      <div class="step" id="step-fetch">
+        <span class="step-icon pending" id="icon-fetch"></span>
+        <span class="step-label">Fetching sources</span>
+      </div>
+      <div class="step" id="step-report">
+        <span class="step-icon pending" id="icon-report"></span>
+        <span class="step-label">Writing report</span>
+      </div>
+    </div>
+
+    <!-- Results area -->
+    <div id="results" style="display:none;">
+      <div id="subtasks-section">
+        <h2>Sub-questions</h2>
+        <ul id="subtasks-list"></ul>
+      </div>
+      <div id="report-section">
+        <h2>Report</h2>
+        <div id="report-output"></div>
+      </div>
+    </div>
+
+    <!-- Error message -->
+    <div id="error-msg" class="error" style="display:none;"></div>
+  </div>
+
+  <script src="agent.js"></script>
+</body>
+</html>
