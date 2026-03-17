@@ -5,7 +5,7 @@
 
 // In production this hits your Vercel serverless proxy.
 // During local testing, swap this to call Groq directly (see comment below).
-const API_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
+const API_ENDPOINT = "/api/chat";
 
 // ── Step helpers ──────────────────────────────
 
