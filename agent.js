@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────
-// Research Agent — Day 2
-// Robust question decomposer with structured output
+// Research Agent — Day 3
+// Wikipedia source cards with links + better search
 // ─────────────────────────────────────────────
 
 const API_ENDPOINT = "/api/chat";
@@ -32,17 +32,15 @@ async function callLLM(messages) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ messages }),
   });
-
   if (!res.ok) {
     const err = await res.text();
     throw new Error("API error: " + err);
   }
-
   const data = await res.json();
   return data.choices[0].message.content;
 }
 
-// ── Parse JSON safely ─────────────────────────
+// ── JSON parser with fallbacks ────────────────
 
 function parseJSON(raw) {
   try { return JSON.parse(raw); } catch {}
@@ -54,15 +52,14 @@ function parseJSON(raw) {
     const match = raw.match(/\[[\s\S]*?\]/);
     if (match) return JSON.parse(match[0]);
   } catch {}
-  throw new Error("Could not extract JSON from LLM response. Raw: " + raw.slice(0, 200));
+  throw new Error("Could not extract JSON from LLM response.");
 }
 
-// ── Step 1: Decompose the question ────────────
+// ── Step 1: Decompose ─────────────────────────
 
 async function decomposeQuestion(question) {
   const result = await tryDecompose(question);
   if (result) return result;
-  console.warn("First decompose attempt failed, retrying...");
   const retry = await tryDecomposeStrict(question);
   if (retry) return retry;
   throw new Error("Failed to decompose question after 2 attempts.");
@@ -73,95 +70,68 @@ async function tryDecompose(question) {
     {
       role: "system",
       content: `You are a research planning assistant.
-Your ONLY job is to break a question into exactly 3 focused sub-questions.
-
-RULES:
-- Respond with ONLY a JSON array — nothing else
-- The array must contain exactly 3 strings
-- Each string is a specific sub-question
-- No explanations, no markdown, no extra text whatsoever
-
-CORRECT output example:
-["What causes X?", "How does Y affect Z?", "What are the consequences of W?"]
-
-WRONG output examples:
-- Here are the sub-questions: [...]
-- \`\`\`json [...] \`\`\`
-- Any text before or after the array`,
+Break the question into exactly 3 focused sub-questions.
+Respond with ONLY a JSON array of 3 strings. No explanation, no markdown.
+Example: ["What is X?", "How does Y work?", "What are effects of Z?"]`,
     },
-    {
-      role: "user",
-      content: `Break this into 3 sub-questions: "${question}"`,
-    },
+    { role: "user", content: `Break this into 3 sub-questions: "${question}"` },
   ];
-
   try {
     const raw = await callLLM(messages);
     const parsed = parseJSON(raw);
-    if (
-      Array.isArray(parsed) &&
-      parsed.length === 3 &&
-      parsed.every((s) => typeof s === "string" && s.trim().length > 0)
-    ) {
-      return parsed.map((s) => s.trim());
+    if (Array.isArray(parsed) && parsed.length === 3 && parsed.every(s => typeof s === "string" && s.trim().length > 0)) {
+      return parsed.map(s => s.trim());
     }
     return null;
-  } catch (err) {
-    console.warn("tryDecompose failed:", err.message);
-    return null;
-  }
+  } catch { return null; }
 }
 
 async function tryDecomposeStrict(question) {
   const messages = [
-    {
-      role: "user",
-      content: `Break "What is artificial intelligence?" into 3 sub-questions. Reply with only a JSON array.`,
-    },
-    {
-      role: "assistant",
-      content: `["What is the definition and history of artificial intelligence?", "How do AI systems learn and make decisions?", "What are the main applications and impacts of AI today?"]`,
-    },
-    {
-      role: "user",
-      content: `Break "${question}" into 3 sub-questions. Reply with only a JSON array.`,
-    },
+    { role: "user", content: `Break "What is artificial intelligence?" into 3 sub-questions. Reply with only a JSON array.` },
+    { role: "assistant", content: `["What is the definition and history of artificial intelligence?", "How do AI systems learn and make decisions?", "What are the main applications and impacts of AI today?"]` },
+    { role: "user", content: `Break "${question}" into 3 sub-questions. Reply with only a JSON array.` },
   ];
-
   try {
     const raw = await callLLM(messages);
     const parsed = parseJSON(raw);
-    if (
-      Array.isArray(parsed) &&
-      parsed.length >= 2 &&
-      parsed.every((s) => typeof s === "string" && s.trim().length > 0)
-    ) {
-      return parsed.slice(0, 4).map((s) => s.trim());
+    if (Array.isArray(parsed) && parsed.length >= 2 && parsed.every(s => typeof s === "string" && s.trim().length > 0)) {
+      return parsed.slice(0, 4).map(s => s.trim());
     }
     return null;
-  } catch (err) {
-    console.warn("tryDecomposeStrict failed:", err.message);
-    return null;
-  }
+  } catch { return null; }
 }
 
-// ── Step 2: Fetch Wikipedia summaries ────────
+// ── Step 2: Wikipedia search — NEW & IMPROVED ─
 
-async function fetchWikipedia(query) {
-  const searchTerm = query
-    .replace(/[^a-zA-Z0-9 ]/g, "")
-    .split(" ")
-    .filter((w) => w.length > 2)
-    .slice(0, 5)
-    .join("_");
+// Strategy: use Wikipedia's search API first to find the best matching
+// article title, then fetch its summary. Much more reliable than guessing.
 
-  const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(searchTerm)}`;
+async function searchWikipedia(query) {
+  // Step A: search for the best matching article title
+  const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&origin=*&srlimit=1`;
 
   try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.extract ? data.extract.slice(0, 600) : null;
+    const searchRes = await fetch(searchUrl);
+    if (!searchRes.ok) return null;
+    const searchData = await searchRes.json();
+
+    const results = searchData?.query?.search;
+    if (!results || results.length === 0) return null;
+
+    const bestTitle = results[0].title;
+
+    // Step B: fetch the summary for that title
+    const summaryUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(bestTitle)}`;
+    const summaryRes = await fetch(summaryUrl);
+    if (!summaryRes.ok) return null;
+    const summaryData = await summaryRes.json();
+
+    return {
+      title: summaryData.title,
+      extract: summaryData.extract ? summaryData.extract.slice(0, 500) : null,
+      url: summaryData.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(bestTitle)}`,
+    };
   } catch {
     return null;
   }
@@ -170,11 +140,8 @@ async function fetchWikipedia(query) {
 async function fetchAllSources(subtasks) {
   const results = await Promise.all(
     subtasks.map(async (task) => {
-      const summary = await fetchWikipedia(task);
-      return {
-        question: task,
-        source: summary || "No Wikipedia article found for this sub-question.",
-      };
+      const wiki = await searchWikipedia(task);
+      return { question: task, wiki };
     })
   );
   return results;
@@ -184,7 +151,10 @@ async function fetchAllSources(subtasks) {
 
 async function writeReport(originalQuestion, sources) {
   const sourceText = sources
-    .map((s, i) => `Sub-question ${i + 1}: ${s.question}\nSource: ${s.source}`)
+    .map((s, i) => {
+      const src = s.wiki ? s.wiki.extract : "No source found.";
+      return `Sub-question ${i + 1}: ${s.question}\nSource: ${src}`;
+    })
     .join("\n\n");
 
   const messages = [
@@ -208,21 +178,66 @@ Keep the total report under 500 words.`,
   return await callLLM(messages);
 }
 
-// ── Animate sub-questions into the UI ─────────
+// ── Render sub-questions with source cards ────
 
-function renderSubtasks(subtasks) {
+function renderSubtasks(sources) {
   const list = document.getElementById("subtasks-list");
   list.innerHTML = "";
 
-  subtasks.forEach((task, i) => {
+  sources.forEach((item, i) => {
     const li = document.createElement("li");
-    li.setAttribute("data-num", i + 1);
-    li.textContent = task;
     li.style.opacity = "0";
     li.style.transform = "translateY(6px)";
-    li.style.transition = "opacity 0.3s ease, transform 0.3s ease";
+    li.style.transition = `opacity 0.3s ease ${i * 150}ms, transform 0.3s ease ${i * 150}ms`;
+
+    // Question row
+    const questionRow = document.createElement("div");
+    questionRow.className = "subtask-question";
+
+    const num = document.createElement("span");
+    num.className = "subtask-num";
+    num.textContent = i + 1;
+
+    const text = document.createElement("span");
+    text.className = "subtask-text";
+    text.textContent = item.question;
+
+    questionRow.appendChild(num);
+    questionRow.appendChild(text);
+    li.appendChild(questionRow);
+
+    // Source card
+    const card = document.createElement("div");
+
+    if (item.wiki && item.wiki.extract) {
+      card.className = "source-card";
+
+      const label = document.createElement("div");
+      label.className = "source-label";
+      label.textContent = "Wikipedia — " + item.wiki.title;
+
+      const excerpt = document.createElement("div");
+      excerpt.className = "source-text";
+      excerpt.textContent = item.wiki.extract;
+
+      const link = document.createElement("a");
+      link.href = item.wiki.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = "Read more on Wikipedia";
+
+      card.appendChild(label);
+      card.appendChild(excerpt);
+      card.appendChild(link);
+    } else {
+      card.className = "source-card no-source";
+      card.textContent = "No Wikipedia article found for this sub-question.";
+    }
+
+    li.appendChild(card);
     list.appendChild(li);
 
+    // Trigger animation
     setTimeout(() => {
       li.style.opacity = "1";
       li.style.transform = "translateY(0)";
@@ -236,18 +251,12 @@ async function startResearch() {
   const input = document.getElementById("question-input");
   const question = input.value.trim();
 
-  if (!question) {
-    showError("Please enter a question first.");
-    return;
-  }
-
-  if (question.length < 5) {
+  if (!question || question.length < 5) {
     showError("Please enter a more detailed question.");
     return;
   }
 
   hideError();
-
   document.getElementById("results").style.display = "none";
   document.getElementById("subtasks-list").innerHTML = "";
   document.getElementById("report-output").innerHTML = "";
@@ -262,17 +271,23 @@ async function startResearch() {
   setStep("report", "pending");
 
   try {
+    // Step 1: Decompose
     setStep("decompose", "active");
     const subtasks = await decomposeQuestion(question);
     setStep("decompose", "done");
 
+    // Show results area early so cards animate in during fetch
     document.getElementById("results").style.display = "block";
-    renderSubtasks(subtasks);
 
+    // Step 2: Fetch sources
     setStep("fetch", "active");
     const sources = await fetchAllSources(subtasks);
     setStep("fetch", "done");
 
+    // Render sub-questions + source cards together
+    renderSubtasks(sources);
+
+    // Step 3: Write report
     setStep("report", "active");
     const report = await writeReport(question, sources);
     setStep("report", "done");

@@ -6,9 +6,68 @@
   <title>Research Agent</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    .source-card {
+      margin-top: 8px;
+      padding: 10px 14px;
+      background: #f9f9f7;
+      border: 1px solid #e8e8e6;
+      border-left: 3px solid #888;
+      border-radius: 0 8px 8px 0;
+      font-size: 0.85rem;
+      color: #555;
+      line-height: 1.6;
+    }
+    .source-card .source-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #999;
+      margin-bottom: 4px;
+    }
+    .source-card .source-text {
+      color: #444;
+      margin-bottom: 6px;
+    }
+    .source-card a {
+      font-size: 0.8rem;
+      color: #1a1a18;
+      text-decoration: none;
+      border-bottom: 1px solid #ccc;
+    }
+    .source-card a:hover { border-bottom-color: #1a1a18; }
+    .source-card.no-source {
+      border-left-color: #ddd;
+      color: #aaa;
+      font-style: italic;
+    }
+    #subtasks-list li {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0;
+    }
+    .subtask-question {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      width: 100%;
+    }
+    .subtask-num {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #999;
+      margin-top: 2px;
+      flex-shrink: 0;
+    }
+    .subtask-text {
+      font-size: 0.9rem;
+      color: #444;
+      line-height: 1.5;
+    }
+  </style>
 </head>
 <body>
-
   <div class="container">
     <header>
       <h1>Research Agent</h1>
@@ -25,7 +84,6 @@
       <button id="search-btn" onclick="startResearch()">Research</button>
     </div>
 
-    <!-- Agent steps panel (hidden until research starts) -->
     <div class="steps-panel" id="steps-panel" style="display:none;">
       <div class="step" id="step-decompose">
         <span class="step-icon pending" id="icon-decompose"></span>
@@ -41,10 +99,9 @@
       </div>
     </div>
 
-    <!-- Results area -->
     <div id="results" style="display:none;">
       <div id="subtasks-section">
-        <h2>Sub-questions</h2>
+        <h2>Sub-questions &amp; sources</h2>
         <ul id="subtasks-list"></ul>
       </div>
       <div id="report-section">
@@ -53,7 +110,6 @@
       </div>
     </div>
 
-    <!-- Error message -->
     <div id="error-msg" class="error" style="display:none;"></div>
   </div>
 
