@@ -27,10 +27,7 @@
       color: #999;
       margin-bottom: 4px;
     }
-    .source-card .source-text {
-      color: #444;
-      margin-bottom: 6px;
-    }
+    .source-card .source-text { color: #444; margin-bottom: 6px; }
     .source-card a {
       font-size: 0.8rem;
       color: #1a1a18;
@@ -38,36 +35,32 @@
       border-bottom: 1px solid #ccc;
     }
     .source-card a:hover { border-bottom-color: #1a1a18; }
-    .source-card.no-source {
-      border-left-color: #ddd;
-      color: #aaa;
-      font-style: italic;
-    }
+    .source-card.no-source { border-left-color: #ddd; color: #aaa; font-style: italic; }
 
     /* ── Sub-task layout ── */
-    #subtasks-list li {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 0;
+    #subtasks-list li { flex-direction: column; align-items: flex-start; gap: 0; }
+    .subtask-question { display: flex; gap: 8px; align-items: flex-start; width: 100%; }
+    .subtask-num { font-size: 0.75rem; font-weight: 600; color: #999; margin-top: 2px; flex-shrink: 0; }
+    .subtask-text { font-size: 0.9rem; color: #444; line-height: 1.5; }
+
+    /* ── Day 5: Step detail + time ── */
+    .step-detail {
+      font-size: 0.78rem;
+      color: #888;
+      margin-top: 3px;
+      line-height: 1.4;
+      display: none;
     }
-    .subtask-question {
-      display: flex;
-      gap: 8px;
-      align-items: flex-start;
-      width: 100%;
-    }
-    .subtask-num {
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: #999;
+    .step-time {
+      font-size: 0.72rem;
+      color: #bbb;
       margin-top: 2px;
-      flex-shrink: 0;
+      display: none;
     }
-    .subtask-text {
-      font-size: 0.9rem;
-      color: #444;
-      line-height: 1.5;
-    }
+    .step.done .step-detail { color: #5a8a3a; }
+    .step.error .step-detail { color: #c0392b; }
+    .step.error .step-time { color: #e57373; }
+    .step-text-wrap { display: flex; flex-direction: column; }
   </style>
 </head>
 <body>
@@ -87,20 +80,42 @@
       <button id="search-btn" onclick="startResearch()">Research</button>
     </div>
 
-    <!-- Agent steps panel -->
+    <!--
+      DAY 5 UPGRADE: Each step now has 3 elements:
+        1. step-icon    — the circle (spinner / tick / red dot)
+        2. step-label   — the main label text
+        3. step-detail  — sub-detail injected by updateStep()
+        4. step-time    — "Completed in Xs" injected by updateStep()
+    -->
     <div class="steps-panel" id="steps-panel" style="display:none;">
+
       <div class="step" id="step-decompose">
         <span class="step-icon pending" id="icon-decompose"></span>
-        <span class="step-label">Breaking question into sub-tasks</span>
+        <div class="step-text-wrap">
+          <span class="step-label" id="label-decompose">Breaking question into sub-tasks</span>
+          <span class="step-detail" id="detail-decompose"></span>
+          <span class="step-time"   id="time-decompose"></span>
+        </div>
       </div>
+
       <div class="step" id="step-fetch">
         <span class="step-icon pending" id="icon-fetch"></span>
-        <span class="step-label">Fetching sources</span>
+        <div class="step-text-wrap">
+          <span class="step-label" id="label-fetch">Fetching sources</span>
+          <span class="step-detail" id="detail-fetch"></span>
+          <span class="step-time"   id="time-fetch"></span>
+        </div>
       </div>
+
       <div class="step" id="step-report">
         <span class="step-icon pending" id="icon-report"></span>
-        <span class="step-label">Writing report</span>
+        <div class="step-text-wrap">
+          <span class="step-label" id="label-report">Writing report</span>
+          <span class="step-detail" id="detail-report"></span>
+          <span class="step-time"   id="time-report"></span>
+        </div>
       </div>
+
     </div>
 
     <!-- Results area -->
@@ -112,11 +127,9 @@
       <div id="report-section">
         <h2>Report</h2>
         <div id="report-output"></div>
-        <!-- action buttons injected here by renderReport() -->
       </div>
     </div>
 
-    <!-- Error message -->
     <div id="error-msg" class="error" style="display:none;"></div>
   </div>
 

@@ -1,13 +1,98 @@
+// ==============================================
+// Research Agent — Day 5
+// What's new:
+//   1. updateStep() — replaces setStep()
+//      Shows sub-detail text, elapsed time,
+//      error state with red icon
+//   2. Step timers — records start time per step,
+//      shows "Completed in Xs" when done
+//   3. Progressive sub-details — each step shows
+//      what it found, not just that it finished
+//   4. Error state — red icon + clear message
+//      when any step fails
+// Key concepts: DOM manipulation in real time,
+//               CSS state-driven styling,
+//               Date.now() for timing
+// ==============================================
+
 const API_ENDPOINT = "/api/chat";
 
-// ── Step helpers ──────────────────────────────
+// ── Step timing tracker ───────────────────────
+// Stores the start time for each step so we can
+// show how long each one took when it finishes.
+const stepTimers = {};
 
-function setStep(stepId, status) {
-  const step = document.getElementById("step-" + stepId);
-  const icon = document.getElementById("icon-" + stepId);
+// ── updateStep() — DAY 5 CORE FUNCTION ───────
+//
+// CONCEPT: CSS state-driven styling
+// We set a class name and let CSS handle visuals.
+// JS handles logic. CSS handles appearance.
+// They never mix — this is clean separation.
+//
+// Parameters:
+//   stepId — "decompose" | "fetch" | "report"
+//   status — "pending" | "active" | "done" | "error"
+//   detail — optional sub-detail text below label
+
+function updateStep(stepId, status, detail = "") {
+  const step    = document.getElementById("step-" + stepId);
+  const icon    = document.getElementById("icon-" + stepId);
+  const label   = document.getElementById("label-" + stepId);
+  const detailEl = document.getElementById("detail-" + stepId);
+  const timeEl  = document.getElementById("time-" + stepId);
+
+  if (!step || !icon) return;
+
+  // Set CSS classes — CSS handles all visual changes
   step.className = "step " + status;
   icon.className = "step-icon " + status;
+
+  // Update label colour and weight per status
+  if (label) {
+    if (status === "pending") {
+      label.style.color = "";
+      label.style.fontWeight = "";
+    } else if (status === "active") {
+      label.style.color = "#1a1a18";
+      label.style.fontWeight = "500";
+    } else if (status === "done") {
+      label.style.color = "#3B6D11";
+      label.style.fontWeight = "500";
+    } else if (status === "error") {
+      label.style.color = "#c0392b";
+      label.style.fontWeight = "500";
+    }
+  }
+
+  // Show detail text if provided
+  if (detailEl) {
+    if (detail) {
+      detailEl.textContent = detail;
+      detailEl.style.display = "block";
+    } else {
+      detailEl.style.display = "none";
+    }
+  }
+
+  // Record start time when going active
+  if (status === "active") {
+    stepTimers[stepId] = Date.now();
+    if (timeEl) timeEl.style.display = "none";
+  }
+
+  // Show elapsed time on done or error
+  if ((status === "done" || status === "error") && stepTimers[stepId]) {
+    const elapsed = ((Date.now() - stepTimers[stepId]) / 1000).toFixed(1);
+    if (timeEl) {
+      timeEl.textContent = status === "done"
+        ? `Completed in ${elapsed}s`
+        : `Failed after ${elapsed}s`;
+      timeEl.style.display = "block";
+    }
+  }
 }
+
+// ── Error / hide helpers ──────────────────────
 
 function showError(msg) {
   const el = document.getElementById("error-msg");
@@ -20,8 +105,6 @@ function hideError() {
 }
 
 // ── LLM call ─────────────────────────────────
-// Every call to Groq goes through here.
-// We POST a messages array and get back a string.
 
 async function callLLM(messages) {
   const res = await fetch(API_ENDPOINT, {
@@ -38,10 +121,6 @@ async function callLLM(messages) {
 }
 
 // ── JSON parser with 3 fallback strategies ────
-// LLMs don't always return clean JSON.
-// Strategy 1: direct parse
-// Strategy 2: strip markdown fences ```json ... ```
-// Strategy 3: extract first [...] found in text
 
 function parseJSON(raw) {
   try { return JSON.parse(raw); } catch {}
@@ -56,15 +135,11 @@ function parseJSON(raw) {
   throw new Error("Could not extract JSON from LLM response.");
 }
 
-// ── STEP 1: Decompose the question ───────────
-// Sends the user's question to Groq.
-// Gets back a JSON array of 3 sub-questions.
-// Has a retry mechanism if first attempt fails.
+// ── STEP 1: Decompose ─────────────────────────
 
 async function decomposeQuestion(question) {
   const result = await tryDecompose(question);
   if (result) return result;
-  console.warn("First decompose attempt failed, retrying...");
   const retry = await tryDecomposeStrict(question);
   if (retry) return retry;
   throw new Error("Failed to decompose question after 2 attempts.");
@@ -124,10 +199,7 @@ async function tryDecomposeStrict(question) {
   } catch { return null; }
 }
 
-// ── STEP 2: Fetch Wikipedia sources ──────────
-// Two-step search: find best article title first,
-// then fetch its summary. More reliable than
-// converting the sub-question directly to a URL.
+// ── STEP 2: Wikipedia sources ─────────────────
 
 async function searchWikipedia(query) {
   const searchUrl =
@@ -155,7 +227,6 @@ async function searchWikipedia(query) {
 }
 
 async function fetchAllSources(subtasks) {
-  // Promise.all runs all 3 fetches in parallel — faster than one by one
   const results = await Promise.all(
     subtasks.map(async (task) => {
       const wiki = await searchWikipedia(task);
@@ -165,25 +236,9 @@ async function fetchAllSources(subtasks) {
   return results;
 }
 
-// ── STEP 3: Write the report — DAY 4 FOCUS ───
-//
-// CONCEPT: Prompt chaining
-// We take everything gathered so far and feed it
-// into one final LLM call:
-//   - Original question (context)
-//   - 3 sub-questions (structure)
-//   - 3 Wikipedia snippets (grounding facts)
-//
-// The system prompt acts like a brief to a writer:
-// "Here is your topic, here are your sources,
-//  here is the format. Now write."
-//
-// The more specific your instructions, the more
-// predictable and useful the output.
+// ── STEP 3: Write report ──────────────────────
 
 async function writeReport(originalQuestion, sources) {
-  // Build a numbered source block so the LLM
-  // knows which source maps to which sub-question
   const sourceBlock = sources
     .map((s, i) => {
       const snippet = s.wiki?.extract || "No source available.";
@@ -195,19 +250,11 @@ async function writeReport(originalQuestion, sources) {
     {
       role: "system",
       content: `You are an expert research report writer.
-You will receive a question, its sub-questions, and source content for each.
-
-Your job:
 - Write a well-structured research report in markdown
 - Use ONLY the provided sources — do not invent facts
-- Structure the report EXACTLY like this:
-  1. Short intro paragraph (2-3 sentences giving context)
-  2. One section per sub-question with a ## heading
-  3. Short conclusion paragraph summarising the key insight
-- Use plain, clear language — no jargon
-- Keep the total report under 500 words
-- Do NOT write phrases like "According to Wikipedia" or "Source 1 says"
-  — just write the content naturally as a flowing report`,
+- Structure: short intro → one ## section per sub-question → conclusion
+- Plain clear language, under 500 words
+- Do NOT write "According to Wikipedia" or "Source 1 says"`,
     },
     {
       role: "user",
@@ -219,9 +266,6 @@ Your job:
 }
 
 // ── Render source cards ───────────────────────
-// Called after sources are fetched.
-// Builds each sub-question + Wikipedia card
-// with a staggered fade-in animation.
 
 function renderSubtasks(sources) {
   const list = document.getElementById("subtasks-list");
@@ -233,7 +277,6 @@ function renderSubtasks(sources) {
     li.style.transform = "translateY(6px)";
     li.style.transition = `opacity 0.3s ease ${i * 150}ms, transform 0.3s ease ${i * 150}ms`;
 
-    // Question row with number badge
     const questionRow = document.createElement("div");
     questionRow.className = "subtask-question";
     const num = document.createElement("span");
@@ -246,7 +289,6 @@ function renderSubtasks(sources) {
     questionRow.appendChild(text);
     li.appendChild(questionRow);
 
-    // Wikipedia source card
     const card = document.createElement("div");
     if (item.wiki && item.wiki.extract) {
       card.className = "source-card";
@@ -272,7 +314,6 @@ function renderSubtasks(sources) {
     li.appendChild(card);
     list.appendChild(li);
 
-    // Trigger animation after element is in DOM
     setTimeout(() => {
       li.style.opacity = "1";
       li.style.transform = "translateY(0)";
@@ -280,85 +321,47 @@ function renderSubtasks(sources) {
   });
 }
 
-// ── Render report — DAY 4 FOCUS ──────────────
-//
-// CONCEPT: Markdown rendering with marked.js
-// The LLM returns raw markdown text like:
-//   "## What is climate change?\nSome text here..."
-// Without rendering, ## shows as literal characters.
-// marked.parse() converts it to real HTML:
-//   "<h2>What is climate change?</h2><p>Some text...</p>"
-// We then inject that HTML into the report div.
-//
-// CONCEPT: Clipboard API
-// navigator.clipboard.writeText() copies any string
-// to the system clipboard. It's async (returns a
-// Promise) so we use .then() to update the button
-// text once the copy is confirmed.
-//
-// CONCEPT: Blob download for Markdown export
-// We create a Blob (binary large object) from the
-// markdown string, generate a temporary URL for it,
-// simulate a click on a hidden <a> tag, then clean
-// up the URL. This triggers a browser file download
-// with zero server involvement.
+// ── Render report + action buttons ───────────
 
-// Store the raw markdown so export functions can use it
 let currentReportMarkdown = "";
 
 function renderReport(markdownText) {
-  // Save raw markdown for export buttons
   currentReportMarkdown = markdownText;
-
   const reportSection = document.getElementById("report-section");
-  const reportOutput = document.getElementById("report-output");
+  const reportOutput  = document.getElementById("report-output");
 
-  // Convert markdown → HTML and inject into page
   reportOutput.innerHTML = marked.parse(markdownText);
 
-  // Remove any existing action buttons from a previous search
   const existingActions = document.getElementById("report-actions");
   if (existingActions) existingActions.remove();
 
-  // Build action buttons row
   const actions = document.createElement("div");
   actions.id = "report-actions";
-  actions.style.cssText =
-    "display:flex; gap:10px; margin-top:1.25rem; flex-wrap:wrap;";
+  actions.style.cssText = "display:flex; gap:10px; margin-top:1.25rem; flex-wrap:wrap;";
 
-  // ── Button 1: Copy as Markdown ──
   const copyBtn = document.createElement("button");
   copyBtn.className = "action-btn";
   copyBtn.textContent = "Copy as markdown";
   copyBtn.onclick = () => {
     navigator.clipboard.writeText(markdownText).then(() => {
       copyBtn.textContent = "Copied!";
-      setTimeout(() => {
-        copyBtn.textContent = "Copy as markdown";
-      }, 2000);
-    }).catch(() => {
-      showError("Could not copy — try selecting the text manually.");
-    });
+      setTimeout(() => { copyBtn.textContent = "Copy as markdown"; }, 2000);
+    }).catch(() => showError("Could not copy — try selecting manually."));
   };
 
-  // ── Button 2: Download as .md file ──
   const downloadBtn = document.createElement("button");
   downloadBtn.className = "action-btn";
   downloadBtn.textContent = "Download .md";
   downloadBtn.onclick = () => {
-    // Create a Blob from the markdown string
     const blob = new Blob([markdownText], { type: "text/markdown" });
-    // Generate a temporary URL pointing to that blob
-    const url = URL.createObjectURL(blob);
-    // Create a hidden link, click it, then clean up
-    const a = document.createElement("a");
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
     a.href = url;
     a.download = "research-report.md";
     a.click();
-    URL.revokeObjectURL(url); // free memory
+    URL.revokeObjectURL(url);
   };
 
-  // ── Button 3: New search ──
   const newBtn = document.createElement("button");
   newBtn.className = "action-btn";
   newBtn.textContent = "New search";
@@ -370,7 +373,7 @@ function renderReport(markdownText) {
   reportSection.appendChild(actions);
 }
 
-// ── Reset UI to initial state ─────────────────
+// ── Reset UI ──────────────────────────────────
 
 function resetUI() {
   document.getElementById("results").style.display = "none";
@@ -385,16 +388,17 @@ function resetUI() {
   hideError();
 }
 
+// ── Helper: build source title string ────────
+
+function buildSourceTitles(sources) {
+  const titles = sources.map((s) => s.wiki?.title).filter(Boolean);
+  return titles.length > 0 ? titles.join(" · ") : "no articles found";
+}
+
 // ── Main orchestrator ─────────────────────────
-// This function runs the full agent loop:
-// 1. Validate input
-// 2. Reset UI state
-// 3. Run each step in sequence using await
-// 4. Update the step UI before and after each await
-// 5. Render output progressively as steps complete
 
 async function startResearch() {
-  const input = document.getElementById("question-input");
+  const input    = document.getElementById("question-input");
   const question = input.value.trim();
 
   if (!question || question.length < 5) {
@@ -414,47 +418,49 @@ async function startResearch() {
   btn.textContent = "Researching...";
 
   document.getElementById("steps-panel").style.display = "flex";
-  setStep("decompose", "pending");
-  setStep("fetch", "pending");
-  setStep("report", "pending");
+  updateStep("decompose", "pending");
+  updateStep("fetch",     "pending");
+  updateStep("report",    "pending");
 
   try {
-    // ── Step 1: Decompose ──
-    // Set active BEFORE await so spinner shows immediately
-    setStep("decompose", "active");
+    // Step 1 — Decompose
+    updateStep("decompose", "active", "Asking LLM to break down your question...");
     const subtasks = await decomposeQuestion(question);
-    setStep("decompose", "done");
+    updateStep("decompose", "done", `${subtasks.length} sub-questions generated`);
 
-    // Show results area so source cards can animate in
     document.getElementById("results").style.display = "block";
 
-    // ── Step 2: Fetch Wikipedia sources ──
-    setStep("fetch", "active");
+    // Step 2 — Fetch sources
+    updateStep("fetch", "active", "Searching Wikipedia for each sub-question...");
     const sources = await fetchAllSources(subtasks);
-    setStep("fetch", "done");
-
-    // Render source cards immediately — don't wait for report
+    updateStep("fetch", "done", `Wikipedia: ${buildSourceTitles(sources)}`);
     renderSubtasks(sources);
 
-    // ── Step 3: Write report ──
-    setStep("report", "active");
+    // Step 3 — Write report
+    const sourceWords = sources.map((s) => s.wiki?.extract || "").join(" ").split(" ").length;
+    updateStep("report", "active", `Synthesizing ${sourceWords} words of source material...`);
     const report = await writeReport(question, sources);
-    setStep("report", "done");
-
-    // Render report + action buttons
+    const reportWords = report.trim().split(/\s+/).length;
+    updateStep("report", "done", `${reportWords} word report written`);
     renderReport(report);
 
   } catch (err) {
+    // Mark the currently-active step as errored
+    for (const id of ["decompose", "fetch", "report"]) {
+      const el = document.getElementById("step-" + id);
+      if (el && el.classList.contains("active")) {
+        updateStep(id, "error", err.message);
+        break;
+      }
+    }
     showError("Something went wrong: " + err.message);
     console.error(err);
   } finally {
-    // Always re-enable the button whether success or failure
     btn.disabled = false;
     btn.textContent = "Research";
   }
 }
 
-// Allow Enter key to trigger research
 document.getElementById("question-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter") startResearch();
 });

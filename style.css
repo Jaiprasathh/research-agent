@@ -8,10 +8,7 @@ body {
   padding: 2rem 1rem;
 }
 
-.container {
-  max-width: 720px;
-  margin: 0 auto;
-}
+.container { max-width: 720px; margin: 0 auto; }
 
 /* ── Header ── */
 header { margin-bottom: 2rem; }
@@ -54,28 +51,41 @@ h1 { font-size: 1.8rem; font-weight: 600; margin-bottom: 0.4rem; }
   margin-bottom: 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
-.step { display: flex; align-items: center; gap: 10px; font-size: 0.9rem; color: #888; }
-.step-label { transition: color 0.2s; }
-.step.active .step-label { color: #1a1a18; font-weight: 500; }
-.step.done .step-label { color: #3B6D11; }
-.step.error .step-label { color: #c0392b; }
 
-/* ── Step icons ── */
+/* ── Step row ── */
+.step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.9rem;
+  color: #888;
+}
+.step-label { transition: color 0.2s; }
+
+/* ── Step icon states ── */
 .step-icon {
-  width: 18px; height: 18px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   flex-shrink: 0;
   position: relative;
+  margin-top: 2px;
 }
-.step-icon.pending { border: 2px solid #ddd; background: transparent; }
+.step-icon.pending {
+  border: 2px solid #ddd;
+  background: transparent;
+}
 .step-icon.active {
-  border: 2px solid #888;
+  border: 2px solid #bbb;
   border-top-color: #1a1a18;
   animation: spin 0.8s linear infinite;
 }
-.step-icon.done { background: #3B6D11; border: 2px solid #3B6D11; }
+.step-icon.done {
+  background: #3B6D11;
+  border: 2px solid #3B6D11;
+}
 .step-icon.done::after {
   content: '';
   position: absolute;
@@ -85,7 +95,21 @@ h1 { font-size: 1.8rem; font-weight: 600; margin-bottom: 0.4rem; }
   border-bottom: 2px solid #fff;
   transform: rotate(-45deg);
 }
-.step-icon.error { background: #c0392b; border: 2px solid #c0392b; }
+/* DAY 5: Error state icon */
+.step-icon.error {
+  background: #c0392b;
+  border: 2px solid #c0392b;
+}
+.step-icon.error::after {
+  content: '';
+  position: absolute;
+  left: 5px; top: 3px;
+  width: 2px; height: 8px;
+  background: #fff;
+  border-radius: 1px;
+  transform: rotate(45deg);
+  box-shadow: 4px 4px 0 -2px #fff;
+}
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -140,14 +164,11 @@ h1 { font-size: 1.8rem; font-weight: 600; margin-bottom: 0.4rem; }
 #report-output h2 { font-size: 1.1rem; }
 #report-output h3 { font-size: 1rem; }
 #report-output p { margin-bottom: 0.9rem; }
-#report-output ul, #report-output ol {
-  padding-left: 1.5rem;
-  margin-bottom: 0.9rem;
-}
+#report-output ul, #report-output ol { padding-left: 1.5rem; margin-bottom: 0.9rem; }
 #report-output li { margin-bottom: 0.3rem; }
 #report-output strong { font-weight: 600; }
 
-/* ── Day 4: Action buttons ── */
+/* ── Action buttons ── */
 .action-btn {
   padding: 0.6rem 1.2rem;
   background: transparent;
